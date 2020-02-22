@@ -10,10 +10,8 @@ import aiofiles
 
 
 DEFAULT_PHOTOS_DIR = './test_photos'
-DEFAULT_RESPONSE_DELAY = 0
+DEFAULT_DELAY = 0
 
-
-logging.basicConfig(level=logging.INFO)
 
 parser = argparse.ArgumentParser(description='Script runs server for downloading photo archives')
 parser.add_argument('--logging',
@@ -23,12 +21,12 @@ parser.add_argument('--logging',
                     )
 parser.add_argument('--photos_dir',
                     type=str,
-                    default=DEFAULT_PHOTOS_DIR,
+                    default=None,
                     help='custom path (str) for main photo directory; default=\'./test_photos\'',
                     )
 parser.add_argument('--delay',
                     type=int,
-                    default=DEFAULT_RESPONSE_DELAY,
+                    default=None,
                     help='custom delay (seconds, int) for download response; default=0',
                     )
 
@@ -50,18 +48,21 @@ async def get_process(cmd):
     return process
 
 
-async def archivate(request):
-    response_delay = int(os.getenv('DELAY'))
-    time.sleep(response_delay)
+async def archivate(request, photos_dir, delay):
+    if not photos_dir:
+        photos_dir = DEFAULT_PHOTOS_DIR
+    if not delay:
+        delay = DEFAULT_DELAY
 
-    main_photos_dir = os.getenv('PHOTOS_DIR')
+    time.sleep(delay)
+
     archive_dir = request.match_info['archive_hash']
-    dir_path = os.path.join(main_photos_dir, archive_dir)
+    dir_path = os.path.join(photos_dir, archive_dir)
 
     if not os.path.exists(dir_path):
         raise HTTPNotFound(reason='Архив не существует или был удален')
 
-    cmd = "cd {} && zip -r - {}/".format(main_photos_dir, archive_dir)
+    cmd = "cd {} && zip -r - {}/".format(photos_dir, archive_dir)
     process = await get_process(cmd)
 
     pid = process.pid
@@ -75,7 +76,7 @@ async def archivate(request):
             write_log('Sending archive chunk ...')
 
             archive_chunk = await process.stdout.readline()
-            if archive_chunk == ''.encode('utf-8'):
+            if not archive_chunk:
                 return response
 
             await response.write(archive_chunk)
@@ -95,16 +96,27 @@ async def handle_index_page(request):
     return web.Response(text=index_contents, content_type='text/html')
 
 
-if __name__ == '__main__':
-    args = vars(parser.parse_args())
-    if args['logging']:
-        set_envvar('LOGGING_ACTIVE', 'True')
-    set_envvar('PHOTOS_DIR', args['photos_dir'])
-    set_envvar('DELAY', str(args['delay']))
+def main(photos_dir=None, delay=None):
+
+    def make_archieve(request):
+        return archivate(request, photos_dir, delay)
 
     app = web.Application()
     app.add_routes([
         web.get('/', handle_index_page),
-        web.get('/archive/{archive_hash}/', archivate),
+        web.get('/archive/{archive_hash}/', make_archieve),
     ])
     web.run_app(app)
+
+
+if __name__ == '__main__':
+    args = parser.parse_args()
+
+    if args.logging:
+        logging.basicConfig(level=logging.INFO)
+        set_envvar('LOGGING_ACTIVE', 'True')
+
+    photos_dir = args.photos_dir
+    delay = args.delay
+
+    main(photos_dir, delay)
