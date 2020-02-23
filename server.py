@@ -30,10 +30,6 @@ parser.add_argument('--delay',
                     )
 
 
-def set_envvar(envvar, value):
-    os.environ[envvar] = value
-
-
 def write_log(message):
     if os.getenv('LOGGING_ACTIVE'):
         logging.info(message)
@@ -70,7 +66,6 @@ async def archivate(request, photos_dir, delay):
 
     try:
         while True:
-            await asyncio.sleep(delay)
             write_log('Sending archive chunk ...')
 
             archive_chunk = await process.stdout.readline()
@@ -78,14 +73,14 @@ async def archivate(request, photos_dir, delay):
                 return response
 
             await response.write(archive_chunk)
-            await asyncio.sleep(0)
+            await asyncio.sleep(delay)
 
     finally:
         if process.returncode is None:
             write_log('Download was interrupted')
 
             cmd = "kill -9 $(pgrep -P {})".format(pid)
-            close_process = await get_process(cmd)
+            await get_process(cmd)
 
 
 async def handle_index_page(request):
@@ -112,7 +107,7 @@ if __name__ == '__main__':
 
     if args.logging:
         logging.basicConfig(level=logging.INFO)
-        set_envvar('LOGGING_ACTIVE', 'True')
+        os.environ['LOGGING_ACTIVE'] = 'True'
 
     photos_dir = args.photos_dir
     delay = args.delay
