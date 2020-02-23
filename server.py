@@ -2,7 +2,6 @@ import asyncio
 import os
 import logging
 import argparse
-import time
 
 from aiohttp import web
 from aiohttp.web import HTTPNotFound
@@ -54,8 +53,6 @@ async def archivate(request, photos_dir, delay):
     if not delay:
         delay = DEFAULT_DELAY
 
-    time.sleep(delay)
-
     archive_dir = request.match_info['archive_hash']
     dir_path = os.path.join(photos_dir, archive_dir)
 
@@ -73,6 +70,7 @@ async def archivate(request, photos_dir, delay):
 
     try:
         while True:
+            await asyncio.sleep(delay)
             write_log('Sending archive chunk ...')
 
             archive_chunk = await process.stdout.readline()
