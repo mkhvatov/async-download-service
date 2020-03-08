@@ -9,7 +9,7 @@ from aiohttp.web import HTTPNotFound
 import aiofiles
 
 
-DEFAULT_PHOTOS_PATH = './test_photos'
+DEFAULT_PHOTOS_PATH = 'test_photos'
 DEFAULT_DELAY = 0
 
 
@@ -50,38 +50,47 @@ async def archivate(photos_path, delay, request):
     if not delay:
         delay = DEFAULT_DELAY
 
-    archive_dir = request.match_info['archive_hash']
-    dir_path = os.path.join(photos_path, archive_dir)
+    archive_hash = request.match_info['archive_hash']
+    dir_path = os.path.join(photos_path, archive_hash)
 
     if not os.path.exists(dir_path):
         raise HTTPNotFound(reason='Архив не существует или был удален')
 
-    cmd = "cd {} && zip -r - {}/".format(photos_path, archive_dir)
+    cmd = f'zip -r - {dir_path}/'
     process = await get_process(cmd)
 
     pid = process.pid
 
     response = web.StreamResponse()
+    response.headers['Content-Type'] = 'application/zip'
     response.headers['Content-Disposition'] = 'attachment; filename=\"photos.zip\"'
     await response.prepare(request)
 
     try:
         while True:
-            write_log('Sending archive chunk ...')
+            if delay:
+                await asyncio.sleep(delay)
 
             archive_chunk = await process.stdout.readline()
-            if not archive_chunk:
-                return response
 
+            if not archive_chunk:
+                write_log(f'{cmd!r} exited with {process.returncode}')
+                break
+
+            write_log('Sending archive chunk ...')
             await response.write(archive_chunk)
-            await asyncio.sleep(delay)
+
+    except asyncio.CancelledError:
+        write_log('Download was interrupted')
+
+        write_log(f'Killing "zip" process ...')
+        cmd = "kill -9 $(pgrep -P {})".format(pid)
+        await get_process(cmd)
+        raise
 
     finally:
-        if process.returncode is None:
-            write_log('Download was interrupted')
-
-            cmd = "kill -9 $(pgrep -P {})".format(pid)
-            await get_process(cmd)
+        response.force_close()
+    return response
 
 
 async def handle_index_page(request):
