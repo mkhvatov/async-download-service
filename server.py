@@ -2,13 +2,14 @@ import asyncio
 import os
 import logging
 import argparse
+from functools import partial
 
 from aiohttp import web
 from aiohttp.web import HTTPNotFound
 import aiofiles
 
 
-DEFAULT_PHOTOS_DIR = './test_photos'
+DEFAULT_PHOTOS_PATH = './test_photos'
 DEFAULT_DELAY = 0
 
 
@@ -18,7 +19,7 @@ parser.add_argument('--logging',
                     default=None,
                     help='activate logging',
                     )
-parser.add_argument('--photos_dir',
+parser.add_argument('--photos_path',
                     type=str,
                     default=None,
                     help='custom path (str) for main photo directory; default=\'./test_photos\'',
@@ -43,19 +44,19 @@ async def get_process(cmd):
     return process
 
 
-async def archivate(request, photos_dir, delay):
-    if not photos_dir:
-        photos_dir = DEFAULT_PHOTOS_DIR
+async def archivate(photos_path, delay, request):
+    if not photos_path:
+        photos_path = DEFAULT_PHOTOS_PATH
     if not delay:
         delay = DEFAULT_DELAY
 
     archive_dir = request.match_info['archive_hash']
-    dir_path = os.path.join(photos_dir, archive_dir)
+    dir_path = os.path.join(photos_path, archive_dir)
 
     if not os.path.exists(dir_path):
         raise HTTPNotFound(reason='Архив не существует или был удален')
 
-    cmd = "cd {} && zip -r - {}/".format(photos_dir, archive_dir)
+    cmd = "cd {} && zip -r - {}/".format(photos_path, archive_dir)
     process = await get_process(cmd)
 
     pid = process.pid
@@ -89,15 +90,12 @@ async def handle_index_page(request):
     return web.Response(text=index_contents, content_type='text/html')
 
 
-def main(photos_dir=None, delay=None):
-
-    def make_archieve(request):
-        return archivate(request, photos_dir, delay)
+def main(photos_path=None, delay=None):
 
     app = web.Application()
     app.add_routes([
         web.get('/', handle_index_page),
-        web.get('/archive/{archive_hash}/', make_archieve),
+        web.get('/archive/{archive_hash}/', partial(archivate, photos_path, delay)),
     ])
     web.run_app(app)
 
@@ -109,7 +107,7 @@ if __name__ == '__main__':
         logging.basicConfig(level=logging.INFO)
         os.environ['LOGGING_ACTIVE'] = 'True'
 
-    photos_dir = args.photos_dir
+    photos_path = args.photos_path
     delay = args.delay
 
-    main(photos_dir, delay)
+    main(photos_path, delay)

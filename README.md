@@ -53,7 +53,7 @@ python server.py --logging
 Указать основную директорию для папок с фото:
 
 ```bash
-python server.py --photos_dir './dir_name'
+python server.py --photos_path './dir_name'
 ```
 
 Включить задержку ответа в секундах:
