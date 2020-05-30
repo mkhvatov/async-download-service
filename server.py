@@ -31,11 +31,6 @@ parser.add_argument('--delay',
                     )
 
 
-def write_log(message):
-    if os.getenv('LOGGING_ACTIVE'):
-        logging.info(message)
-
-
 async def get_process(cmd):
     process = await asyncio.create_subprocess_shell(
         cmd,
@@ -45,6 +40,7 @@ async def get_process(cmd):
 
 
 async def archivate(photos_path, delay, request):
+# async def archivate(request, photos_path='test_photos', delay=0):
     if not photos_path:
         photos_path = DEFAULT_PHOTOS_PATH
     if not delay:
@@ -74,16 +70,16 @@ async def archivate(photos_path, delay, request):
             archive_chunk = await process.stdout.readline()
 
             if not archive_chunk:
-                write_log(f'{cmd!r} exited with {process.returncode}')
+                logging.info(f'{cmd!r} exited with {process.returncode}')
                 break
 
-            write_log('Sending archive chunk ...')
+            logging.info('Sending archive chunk ...')
             await response.write(archive_chunk)
 
     except asyncio.CancelledError:
-        write_log('Download was interrupted')
+        logging.info('Download was interrupted')
 
-        write_log(f'Killing "zip" process ...')
+        logging.info(f'Killing "zip" process ...')
         cmd = "kill -9 $(pgrep -P {})".format(pid)
         await get_process(cmd)
         raise
@@ -99,7 +95,15 @@ async def handle_index_page(request):
     return web.Response(text=index_contents, content_type='text/html')
 
 
-def main(photos_path=None, delay=None):
+def main():
+    args = parser.parse_args()
+
+    # TODO: action count https://docs.python.org/3/library/argparse.html#action
+    if args.logging:
+        logging.basicConfig(level=logging.INFO)
+
+    photos_path = args.photos_path
+    delay = args.delay
 
     app = web.Application()
     app.add_routes([
@@ -110,13 +114,4 @@ def main(photos_path=None, delay=None):
 
 
 if __name__ == '__main__':
-    args = parser.parse_args()
-
-    if args.logging:
-        logging.basicConfig(level=logging.INFO)
-        os.environ['LOGGING_ACTIVE'] = 'True'
-
-    photos_path = args.photos_path
-    delay = args.delay
-
-    main(photos_path, delay)
+    main()
