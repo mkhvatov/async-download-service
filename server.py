@@ -11,6 +11,7 @@ import aiofiles
 
 DEFAULT_PHOTOS_PATH = 'test_photos'
 DEFAULT_DELAY = 0
+CHUNK_SIZE_BYTES = 102400
 
 
 parser = argparse.ArgumentParser(description='Script runs server for downloading photo archives')
@@ -41,7 +42,7 @@ async def get_process(cmd):
 
 async def archivate(photos_path, delay, request):
 
-    archive_hash = request.match_info['archive_hash']
+    archive_hash = request.match_info.get('archive_hash')
     dir_path = os.path.join(photos_path, archive_hash)
 
     if not os.path.exists(dir_path):
@@ -50,9 +51,7 @@ async def archivate(photos_path, delay, request):
     cmd = ['zip', '-r', '-', f'{dir_path}/']
     process = await get_process(cmd)
 
-    pid = process.pid
-    # TODO:
-    logging.info(f'PID: {pid}')
+    # pid = process.pid
 
     response = web.StreamResponse()
     response.headers['Content-Type'] = 'application/zip'
@@ -64,7 +63,7 @@ async def archivate(photos_path, delay, request):
             if delay:
                 await asyncio.sleep(delay)
 
-            archive_chunk = await process.stdout.readline()
+            archive_chunk = await process.stdout.read(CHUNK_SIZE_BYTES)
 
             if not archive_chunk:
                 logging.info(f'{cmd!r} exited with {process.returncode}')
@@ -74,7 +73,7 @@ async def archivate(photos_path, delay, request):
             await response.write(archive_chunk)
 
     # TODO: add RuntimeError (KeyboardInterrupt)
-    except (asyncio.CancelledError, RuntimeError):
+    except (asyncio.CancelledError, KeyboardInterrupt):
         logging.info('Download was interrupted')
 
         logging.info(f'Killing "zip" process ...')
