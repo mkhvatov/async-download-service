@@ -21,30 +21,25 @@ parser.add_argument('--logging',
                     )
 parser.add_argument('--photos_path',
                     type=str,
-                    default=None,
+                    default=DEFAULT_PHOTOS_PATH,
                     help='custom path (str) for main photo directory; default=\'./test_photos\'',
                     )
 parser.add_argument('--delay',
                     type=int,
-                    default=None,
+                    default=DEFAULT_DELAY,
                     help='custom delay (seconds, int) for download response; default=0',
                     )
 
 
 async def get_process(cmd):
-    process = await asyncio.create_subprocess_shell(
-        cmd,
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE)
     return process
 
 
 async def archivate(photos_path, delay, request):
-# async def archivate(request, photos_path='test_photos', delay=0):
-    if not photos_path:
-        photos_path = DEFAULT_PHOTOS_PATH
-    if not delay:
-        delay = DEFAULT_DELAY
 
     archive_hash = request.match_info['archive_hash']
     dir_path = os.path.join(photos_path, archive_hash)
@@ -52,10 +47,12 @@ async def archivate(photos_path, delay, request):
     if not os.path.exists(dir_path):
         raise HTTPNotFound(reason='Архив не существует или был удален')
 
-    cmd = f'zip -r - {dir_path}/'
+    cmd = ['zip', '-r', '-', f'{dir_path}/']
     process = await get_process(cmd)
 
     pid = process.pid
+    # TODO:
+    logging.info(f'PID: {pid}')
 
     response = web.StreamResponse()
     response.headers['Content-Type'] = 'application/zip'
@@ -76,12 +73,12 @@ async def archivate(photos_path, delay, request):
             logging.info('Sending archive chunk ...')
             await response.write(archive_chunk)
 
-    except asyncio.CancelledError:
+    # TODO: add RuntimeError (KeyboardInterrupt)
+    except (asyncio.CancelledError, RuntimeError):
         logging.info('Download was interrupted')
 
         logging.info(f'Killing "zip" process ...')
-        cmd = "kill -9 $(pgrep -P {})".format(pid)
-        await get_process(cmd)
+        process.kill()
         raise
 
     finally:
