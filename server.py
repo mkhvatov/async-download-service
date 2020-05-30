@@ -4,14 +4,15 @@ import logging
 import argparse
 from functools import partial
 
+from envparse import env
 from aiohttp import web
 from aiohttp.web import HTTPNotFound
 import aiofiles
 
 
-DEFAULT_PHOTOS_PATH = 'test_photos'
-DEFAULT_DELAY = 0
-CHUNK_SIZE_BYTES = 102400
+DEFAULT_PHOTOS_PATH = env.str('DEFAULT_PHOTOS_PATH', default='test_photos')
+DEFAULT_DELAY = env.int('DEFAULT_DELAY', default=0)
+DEFAULT_CHUNK_SIZE = env.int('DEFAULT_CHUNK_SIZE', default=102400)
 
 
 parser = argparse.ArgumentParser(description='Script runs server for downloading photo archives')
@@ -51,8 +52,6 @@ async def archivate(photos_path, delay, request):
     cmd = ['zip', '-r', '-', f'{dir_path}/']
     process = await get_process(cmd)
 
-    # pid = process.pid
-
     response = web.StreamResponse()
     response.headers['Content-Type'] = 'application/zip'
     response.headers['Content-Disposition'] = 'attachment; filename=\"photos.zip\"'
@@ -63,7 +62,7 @@ async def archivate(photos_path, delay, request):
             if delay:
                 await asyncio.sleep(delay)
 
-            archive_chunk = await process.stdout.read(CHUNK_SIZE_BYTES)
+            archive_chunk = await process.stdout.read(DEFAULT_CHUNK_SIZE)
 
             if not archive_chunk:
                 logging.info(f'{cmd!r} exited with {process.returncode}')
@@ -72,12 +71,15 @@ async def archivate(photos_path, delay, request):
             logging.info('Sending archive chunk ...')
             await response.write(archive_chunk)
 
-    # TODO: add RuntimeError (KeyboardInterrupt)
     except (asyncio.CancelledError, KeyboardInterrupt):
         logging.info('Download was interrupted')
-
         logging.info(f'Killing "zip" process ...')
+
         process.kill()
+        stdout, _ = await process.communicate()
+        while stdout:
+            stdout, _ = await process.communicate()
+            await asyncio.sleep(1)
         raise
 
     finally:
