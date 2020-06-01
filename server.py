@@ -49,7 +49,7 @@ async def archivate(photos_path, delay, request):
     if not os.path.exists(dir_path):
         raise HTTPNotFound(reason='Архив не существует или был удален')
 
-    cmd = ['zip', '-r', '-', f'{dir_path}/']
+    cmd = ['zip', '-', f'{dir_path}/', '-r', '-j']
     process = await get_process(cmd)
 
     response = web.StreamResponse()
@@ -96,7 +96,6 @@ async def handle_index_page(request):
 def main():
     args = parser.parse_args()
 
-    # TODO: action count https://docs.python.org/3/library/argparse.html#action
     if args.logging:
         logging.basicConfig(level=logging.INFO)
 
