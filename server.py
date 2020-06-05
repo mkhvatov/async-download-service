@@ -43,9 +43,11 @@ async def get_process(cmd):
 
 async def archivate(photos_path, delay, request):
 
-    archive_hash = request.match_info.get('archive_hash')
-    dir_path = os.path.join(photos_path, archive_hash)
+    archive_hash = request.match_info.get('archive_hash', None)
+    if not archive_hash:
+        raise HTTPNotFound(reason='Архив не существует или был удален')
 
+    dir_path = os.path.join(photos_path, archive_hash)
     if not os.path.exists(dir_path):
         raise HTTPNotFound(reason='Архив не существует или был удален')
 
@@ -59,8 +61,7 @@ async def archivate(photos_path, delay, request):
 
     try:
         while True:
-            if delay:
-                await asyncio.sleep(delay)
+            await asyncio.sleep(delay)
 
             archive_chunk = await process.stdout.read(DEFAULT_CHUNK_SIZE)
 
