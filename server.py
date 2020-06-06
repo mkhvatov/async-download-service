@@ -33,26 +33,18 @@ parser.add_argument('--delay',
                     )
 
 
-async def get_process(cmd):
-    process = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE)
-    return process
-
-
 async def archivate(photos_path, delay, request):
 
-    archive_hash = request.match_info.get('archive_hash', None)
-    if not archive_hash:
+    archive_hash = request.match_info['archive_hash']
+    working_directory = os.path.join(photos_path, archive_hash)
+    if not os.path.exists(working_directory):
         raise HTTPNotFound(reason='Архив не существует или был удален')
 
-    dir_path = os.path.join(photos_path, archive_hash)
-    if not os.path.exists(dir_path):
-        raise HTTPNotFound(reason='Архив не существует или был удален')
-
-    cmd = ['zip', '-', f'{dir_path}/', '-r', '-j']
-    process = await get_process(cmd)
+    cmd = ['zip', '-r', '-', '.']
+    process = await asyncio.create_subprocess_exec(
+        *cmd, cwd=working_directory,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE)
 
     response = web.StreamResponse()
     response.headers['Content-Type'] = 'application/zip'
@@ -76,11 +68,10 @@ async def archivate(photos_path, delay, request):
         logging.info('Download was interrupted')
         logging.info(f'Killing "zip" process ...')
 
+        # TODO: move to finally
         process.kill()
-        stdout, _ = await process.communicate()
-        while stdout:
-            stdout, _ = await process.communicate()
-            await asyncio.sleep(1)
+        await process.communicate()
+
         raise
 
     finally:
