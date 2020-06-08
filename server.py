@@ -68,13 +68,16 @@ async def archivate(photos_path, delay, request):
         logging.info('Download was interrupted')
         logging.info(f'Killing "zip" process ...')
 
-        # TODO: move to finally
-        process.kill()
-        await process.communicate()
+    except BaseException as error:
+        logging.info(f'Unexpected error: {error}')
 
         raise
 
     finally:
+        if process.returncode is None:
+            process.kill()
+            await process.communicate()
+
         response.force_close()
     return response
 
